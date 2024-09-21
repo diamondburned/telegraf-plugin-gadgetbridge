@@ -1,0 +1,2 @@
+[[inputs.gadgetbridge]]
+database_paths = ["/home/diamond/.local/share/gadgetbridge/google-pixel-7-pro.db"]
