@@ -44,7 +44,7 @@ func TestPlugin_Gather(t *testing.T) {
 			assert.False(t, metric.Time.IsZero(), "metric timestamp is zero")
 		}
 
-		autogold.ExpectFile(t, acc.Metrics, autogold.Name("TestPlugin_Gather.metrics"))
+		autogold.ExpectFile(t, acc.Metrics, autogold.Name("TestPlugin_Gather/metrics"))
 	})
 
 	t.Run("pass 2", func(t *testing.T) {
