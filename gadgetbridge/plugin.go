@@ -88,8 +88,8 @@ var knownTables = []TableDescription{
 		Name: "HYBRID_HRACTIVITY_SAMPLE",
 		Columns: TableColumns{
 			Timestamp: "TIMESTAMP",
-			Tags:      []string{"USER_ID", "DEVICE_ID", "WEAR_TYPE"},
-			Fields:    []string{"STEPS", "CALORIES", "VARIABILITY", "MAX_VARIABILITY", "HEARTRATE_QUALITY", "ACTIVE", "HEART_RATE"},
+			Tags:      []string{"USER_ID", "DEVICE_ID"},
+			Fields:    []string{"WEAR_TYPE", "STEPS", "CALORIES", "VARIABILITY", "MAX_VARIABILITY", "HEARTRATE_QUALITY", "ACTIVE", "HEART_RATE"},
 		},
 	},
 	{
