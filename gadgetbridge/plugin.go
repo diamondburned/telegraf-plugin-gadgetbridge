@@ -15,10 +15,11 @@ import (
 
 	_ "embed"
 
-	"github.com/Masterminds/squirrel"
+	"github.com/doug-martin/goqu/v9"
 	"github.com/influxdata/telegraf"
 	"github.com/influxdata/telegraf/plugins/inputs"
 
+	_ "github.com/doug-martin/goqu/v9/dialect/sqlite3"
 	_ "modernc.org/sqlite"
 )
 
@@ -56,9 +57,7 @@ func (p *Plugin) SampleConfig() string {
 }
 
 func (p *Plugin) Init() error {
-	p.state = pluginState{
-		LastTableTimes: make(map[string]int64),
-	}
+	p.SetState(nil)
 	return nil
 }
 
@@ -151,26 +150,27 @@ func (p *Plugin) Gather(acc telegraf.Accumulator) error {
 	return errors.Join(errs...)
 }
 
+var sqliteBuilder = goqu.Dialect("sqlite")
+
 func (p *Plugin) gatherTable(acc telegraf.Accumulator, db *sql.DB, dbPath string, t TableDescription) error {
-	q := squirrel.
-		Select(slices.Concat(
+	q := sqliteBuilder.
+		From(t.Name).
+		Select(sliceAny(slices.Concat(
 			[]string{t.Columns.Timestamp},
 			t.Columns.Tags,
 			t.Columns.Fields,
-		)...).
-		From(t.Name)
+		))...).
+		Order(goqu.C(t.Columns.Timestamp).Asc())
 	if lastTime, ok := p.state.LastTableTimes[t.Name]; ok {
-		q.Where(squirrel.Gt{t.Columns.Timestamp: lastTime})
+		q = q.Where(goqu.C(t.Columns.Timestamp).Gt(lastTime))
 	}
 
-	var ts int64
-	v := slices.Concat(
-		[]any{&ts},
-		sliceOfPointers[string](len(t.Columns.Tags)),
-		sliceOfPointers[any](len(t.Columns.Fields)),
-	)
+	qSQL, qArgs, err := q.ToSQL()
+	if err != nil {
+		return fmt.Errorf("error building query: %w", err)
+	}
 
-	r, err := q.RunWith(db).Query()
+	r, err := db.Query(qSQL, qArgs...)
 	if err != nil {
 		return err
 	}
@@ -182,6 +182,13 @@ func (p *Plugin) gatherTable(acc telegraf.Accumulator, db *sql.DB, dbPath string
 
 	tagOffset := 1
 	fieldOffset := tagOffset + len(t.Columns.Tags)
+
+	var ts int64
+	v := slices.Concat(
+		[]any{&ts},
+		sliceOfPointers[string](len(t.Columns.Tags)),
+		sliceOfPointers[any](len(t.Columns.Fields)),
+	)
 
 	for r.Next() {
 		if err := r.Scan(v...); err != nil {
@@ -209,6 +216,14 @@ func (p *Plugin) gatherTable(acc telegraf.Accumulator, db *sql.DB, dbPath string
 	return nil
 }
 
+func sliceAny[T1 any](s []T1) []any {
+	r := make([]any, len(s))
+	for i, v := range s {
+		r[i] = v
+	}
+	return r
+}
+
 func sliceOfPointers[T any](n int) []any {
 	s := make([]any, n)
 	for i := range s {
@@ -227,14 +242,19 @@ func (p *Plugin) GetState() interface{} {
 }
 
 func (p *Plugin) SetState(state interface{}) error {
-	pluginState, ok := state.(pluginState)
-	if !ok {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	switch state := state.(type) {
+	case nil:
+		p.state = pluginState{
+			LastTableTimes: make(map[string]int64),
+		}
+	case pluginState:
+		p.state = state
+	default:
 		return fmt.Errorf("invalid state type: %T", state)
 	}
-
-	p.mu.Lock()
-	p.state = pluginState
-	p.mu.Unlock()
 
 	return nil
 }
